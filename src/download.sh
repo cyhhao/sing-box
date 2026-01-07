@@ -3,20 +3,25 @@ get_latest_version() {
     core)
         name=$is_core_name
         url="https://api.github.com/repos/${is_core_repo}/releases/latest?v=$RANDOM"
+        latest_ver=$(_wget -qO- $url | grep tag_name | grep -E -o 'v([0-9.]+)')
+        [[ ! $latest_ver ]] && {
+            err "获取 ${name} 最新版本失败."
+        }
         ;;
     sh)
+        # Script updates from branch, no version needed
         name="$is_core_name 脚本"
-        url="https://api.github.com/repos/$is_sh_repo/releases/latest?v=$RANDOM"
+        latest_ver="branch-${is_sh_branch}"
         ;;
     caddy)
         name="Caddy"
         url="https://api.github.com/repos/$is_caddy_repo/releases/latest?v=$RANDOM"
+        latest_ver=$(_wget -qO- $url | grep tag_name | grep -E -o 'v([0-9.]+)')
+        [[ ! $latest_ver ]] && {
+            err "获取 ${name} 最新版本失败."
+        }
         ;;
     esac
-    latest_ver=$(_wget -qO- $url | grep tag_name | grep -E -o 'v([0-9.]+)')
-    [[ ! $latest_ver ]] && {
-        err "获取 ${name} 最新版本失败."
-    }
     unset name url
 }
 download() {
@@ -40,9 +45,9 @@ download() {
     sh)
         name="$is_core_name 脚本"
         tmpfile=$tmpdir/sh.tar.gz
-        link="https://github.com/${is_sh_repo}/releases/download/${latest_ver}/code.tar.gz"
+        link="https://github.com/${is_sh_repo}/archive/refs/heads/${is_sh_branch}.tar.gz"
         download_file
-        tar zxf $tmpfile -C $is_sh_dir
+        tar zxf $tmpfile --strip-components 1 -C $is_sh_dir
         chmod +x $is_sh_bin ${is_sh_bin/$is_core/sb}
         ;;
     caddy)

@@ -92,6 +92,7 @@ is_caddy_repo=caddyserver/caddy
 is_caddyfile=$is_caddy_dir/Caddyfile
 is_caddy_conf=$is_caddy_dir/$author
 is_caddy_service=$(systemctl list-units --full -all | grep caddy.service)
+is_sh_branch=${BRANCH:-main}
 is_http_port=80
 is_https_port=443
 
