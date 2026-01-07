@@ -631,11 +631,23 @@ change() {
 
 # delete config.
 del() {
+    # Handle HTTPS-PROXY configs specially
+    if [[ $1 == HTTPS-PROXY-* ]]; then
+        load https-proxy.sh
+        https_proxy_del "$1"
+        return
+    fi
     # dont get ip
     is_dont_get_ip=1
     [[ $is_conf_dir_empty ]] && return # not found any json file.
     # get a config file
     [[ ! $is_config_file ]] && get info $1
+    # Check if loaded config is HTTPS-PROXY
+    if [[ $is_config_file == HTTPS-PROXY-* ]]; then
+        load https-proxy.sh
+        https_proxy_del "$is_config_file"
+        return
+    fi
     if [[ $is_config_file ]]; then
         if [[ $is_main_start && ! $is_no_del_msg ]]; then
             msg "\n是否删除配置文件?: $is_config_file"
@@ -1274,8 +1286,20 @@ get() {
 
 # show info
 info() {
+    # Handle HTTPS-PROXY configs specially
+    if [[ $1 == HTTPS-PROXY-* ]] || [[ $is_config_file == HTTPS-PROXY-* ]]; then
+        load https-proxy.sh
+        https_proxy_info "${1:-$is_config_file}"
+        return
+    fi
     if [[ ! $is_protocol ]]; then
         get info $1
+    fi
+    # Check if loaded config is HTTPS-PROXY
+    if [[ $is_protocol == "http" && $is_config_file == HTTPS-PROXY-* ]]; then
+        load https-proxy.sh
+        https_proxy_info "$is_config_file"
+        return
     fi
     # is_color=$(shuf -i 41-45 -n1)
     is_color=44
