@@ -1068,6 +1068,8 @@ get() {
         ;;
     info)
         get file $2
+        # Skip parsing for HTTPS-PROXY configs (handled by https-proxy.sh)
+        [[ $is_config_file == HTTPS-PROXY-* ]] && return
         if [[ $is_config_file ]]; then
             is_json_str=$(cat $is_conf_dir/"$is_config_file" | sed s#//.*##)
             is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key)),(.outbounds[1].tag)' <<<$is_json_str)
