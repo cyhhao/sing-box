@@ -20,6 +20,7 @@ protocol_list=(
     Trojan-HTTPUpgrade-TLS
     VLESS-REALITY
     VLESS-HTTP2-REALITY
+    HTTPS-Proxy
     # Direct
     Socks
 )
@@ -774,6 +775,12 @@ add() {
         socks)
             is_new_protocol=Socks
             ;;
+        https-proxy | httpsproxy | hp)
+            # Redirect to https-proxy module
+            load https-proxy.sh
+            https_proxy_add ${@:2}
+            return
+            ;;
         *)
             for v in ${protocol_list[@]}; do
                 [[ $(grep -E -i "^$is_lower$" <<<$v) ]] && is_new_protocol=$v && break
@@ -788,6 +795,12 @@ add() {
     [[ ! $is_new_protocol ]] && ask set_protocol
 
     case ${is_new_protocol,,} in
+    https-proxy)
+        # Redirect to https-proxy module when selected from menu
+        load https-proxy.sh
+        https_proxy_add ${@:2}
+        return
+        ;;
     *-tls)
         is_use_tls=1
         is_use_host=$2
@@ -1620,6 +1633,10 @@ main() {
     dns)
         load dns.sh
         dns_set ${@:2}
+        ;;
+    https-proxy | httpsproxy | hp)
+        load https-proxy.sh
+        https_proxy_main ${@:2}
         ;;
     debug)
         is_debug=1
