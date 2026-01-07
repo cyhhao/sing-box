@@ -1292,17 +1292,17 @@ get() {
 
 # show info
 info() {
-    # Handle HTTPS-PROXY configs specially
-    if [[ $1 == HTTPS-PROXY-* ]] || [[ $is_config_file == HTTPS-PROXY-* ]]; then
+    # Handle HTTPS-PROXY configs specially (check $1 first)
+    if [[ $1 == HTTPS-PROXY-* ]]; then
         load https-proxy.sh
-        https_proxy_info "${1:-$is_config_file}"
+        https_proxy_info "$1"
         return
     fi
     if [[ ! $is_protocol ]]; then
         get info $1
     fi
-    # Check if loaded config is HTTPS-PROXY
-    if [[ $is_protocol == "http" && $is_config_file == HTTPS-PROXY-* ]]; then
+    # Check if loaded config is HTTPS-PROXY (after get info sets $is_config_file)
+    if [[ $is_config_file == HTTPS-PROXY-* ]]; then
         load https-proxy.sh
         https_proxy_info "$is_config_file"
         return
