@@ -62,7 +62,7 @@ https_proxy_add() {
     if [[ -z "$use_port" ]]; then
         get_port
         use_port=$tmp_port
-        msg "推荐端口: $use_port (常用: 26331)"
+        msg "推荐端口: $use_port"
         ask string use_port "请输入端口 (默认 $use_port):"
         [[ -z "$use_port" ]] && use_port=$tmp_port
     fi
