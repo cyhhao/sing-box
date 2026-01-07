@@ -106,7 +106,8 @@ https_proxy_add() {
     # === Email (optional) ===
     if [[ -z "$use_email" ]]; then
         msg "\n$(_yellow '提示: Email 用于 ACME/Let'\''s Encrypt 注册, 建议填写')"
-        ask string use_email "请输入 Email (可选, 直接回车跳过):"
+        echo -ne "请输入 Email (可选, 直接回车跳过):"
+        read use_email
     fi
 
     # === Cloudflare API Token ===
@@ -123,7 +124,9 @@ https_proxy_add() {
         err "Cloudflare API Token 不能为空"
     fi
 
-    ask string cf_zone_token "请输入 Zone Token (可选, 直接回车跳过):"
+    # Zone Token is optional, use read directly to allow empty input
+    echo -ne "请输入 Zone Token (可选, 直接回车跳过):"
+    read cf_zone_token
 
     # Ensure ACME directory
     _ensure_acme_dir
