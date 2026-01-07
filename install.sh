@@ -191,7 +191,10 @@ download() {
 
 # get server ip
 get_ip() {
-    ip="192.168.1.1"
+    export "$(_wget -4 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
+    [[ -z $ip ]] && export "$(_wget -6 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
+    # Fallback to default IP if detection fails
+    [[ -z $ip ]] && ip="192.168.1.1"
 }
 
 # check background tasks status

@@ -117,7 +117,11 @@ get_uuid() {
 }
 
 get_ip() {
-    ip="192.168.1.1"
+    [[ $ip || $is_no_auto_tls || $is_gen || $is_dont_get_ip ]] && return
+    export "$(_wget -4 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
+    [[ ! $ip ]] && export "$(_wget -6 -qO- https://one.one.one.one/cdn-cgi/trace | grep ip=)" &>/dev/null
+    # Fallback to default IP if detection fails
+    [[ ! $ip ]] && ip="192.168.1.1"
 }
 
 get_port() {
