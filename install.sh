@@ -1,7 +1,8 @@
 #!/bin/bash
 
-author=233boy
-# github=https://github.com/233boy/sing-box
+author=cyhhao
+branch=${BRANCH:-main}
+# github=https://github.com/cyhhao/sing-box
 
 # bash fonts colors
 red='\e[31m'
@@ -122,7 +123,8 @@ msg() {
 
 # show help msg
 show_help() {
-    echo -e "Usage: $0 [-f xxx | -l | -p xxx | -v xxx | -h]"
+    echo -e "Usage: $0 [-b xxx | -f xxx | -l | -p xxx | -v xxx | -h]"
+    echo -e "  -b, --branch <branch>           指定脚本分支, e.g., -b nat (或环境变量 BRANCH=nat)"
     echo -e "  -f, --core-file <path>          自定义 $is_core_name 文件路径, e.g., -f /root/$is_core-linux-amd64.tar.gz"
     echo -e "  -l, --local-install             本地获取安装脚本, 使用当前目录"
     echo -e "  -p, --proxy <addr>              使用代理下载, e.g., -p http://127.0.0.1:2333"
@@ -166,7 +168,7 @@ download() {
         is_ok=$is_core_ok
         ;;
     sh)
-        link=https://github.com/${is_sh_repo}/releases/latest/download/code.tar.gz
+        link=https://github.com/${is_sh_repo}/archive/refs/heads/${branch}.tar.gz
         name="$is_core_name 脚本"
         tmpfile=$tmpsh
         is_ok=$is_sh_ok
@@ -237,6 +239,13 @@ check_status() {
 pass_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+        -b | --branch)
+            [[ -z $2 ]] && {
+                err "($1) 缺少必需参数, 正确使用示例: [$1 nat]"
+            }
+            branch=$2
+            shift 2
+            ;;
         -f | --core-file)
             [[ -z $2 ]] && {
                 err "($1) 缺少必需参数, 正确使用示例: [$1 /root/$is_core-linux-amd64.tar.gz]"
@@ -383,7 +392,7 @@ main() {
     if [[ $local_install ]]; then
         cp -rf $PWD/* $is_sh_dir
     else
-        tar zxf $is_sh_ok -C $is_sh_dir
+        tar zxf $is_sh_ok --strip-components 1 -C $is_sh_dir
     fi
 
     # create core bin dir
