@@ -394,6 +394,253 @@ https_proxy_list() {
     msg ""
 }
 
+# Change HTTPS Proxy configuration
+# Usage: https_proxy_change <port|tag|filename>
+https_proxy_change() {
+    local target=$1
+
+    # Find config file (reuse logic from https_proxy_info)
+    if [[ -z "$target" ]]; then
+        local configs=()
+        for f in "$is_conf_dir"/${HTTPS_PROXY_PREFIX}-*.json; do
+            [[ -f "$f" ]] && configs+=("$(basename "$f")")
+        done
+
+        if [[ ${#configs[@]} -eq 0 ]]; then
+            err "没有找到 HTTPS Proxy 配置"
+        fi
+
+        if [[ ${#configs[@]} -eq 1 ]]; then
+            target="${configs[0]}"
+        else
+            msg "\n可用的 HTTPS Proxy 配置:"
+            local i=1
+            for c in "${configs[@]}"; do
+                msg "  $i) $c"
+                ((i++))
+            done
+            msg ""
+            ask string target "请选择要更改的配置 (端口号或文件名):"
+        fi
+    fi
+
+    # Find config file
+    local config_file=""
+    if [[ -f "$is_conf_dir/${HTTPS_PROXY_PREFIX}-${target}.json" ]]; then
+        config_file="$is_conf_dir/${HTTPS_PROXY_PREFIX}-${target}.json"
+    elif [[ -f "$is_conf_dir/${target}" ]]; then
+        config_file="$is_conf_dir/${target}"
+    elif [[ -f "$is_conf_dir/${target}.json" ]]; then
+        config_file="$is_conf_dir/${target}.json"
+    fi
+
+    if [[ -z "$config_file" ]] || [[ ! -f "$config_file" ]]; then
+        err "找不到配置: $target"
+    fi
+
+    # Parse current config
+    local json_data
+    json_data=$(cat "$config_file")
+
+    local cur_port cur_domain cur_user cur_pass cur_email cur_api_token cur_zone_token
+    cur_port=$(jq -r '.inbounds[0].listen_port' <<< "$json_data")
+    cur_domain=$(jq -r '.inbounds[0].tls.acme.domain[0]' <<< "$json_data")
+    cur_user=$(jq -r '.inbounds[0].users[0].username' <<< "$json_data")
+    cur_pass=$(jq -r '.inbounds[0].users[0].password' <<< "$json_data")
+    cur_email=$(jq -r '.inbounds[0].tls.acme.email // ""' <<< "$json_data")
+    cur_api_token=$(jq -r '.inbounds[0].tls.acme.dns01_challenge.api_token' <<< "$json_data")
+    cur_zone_token=$(jq -r '.inbounds[0].tls.acme.dns01_challenge.zone_token // ""' <<< "$json_data")
+
+    # Show current config
+    msg "\n$(_green '=== 当前 HTTPS Proxy 配置 ===')"
+    msg "配置文件: $(basename "$config_file")"
+    msg "端口: $cur_port"
+    msg "域名: $cur_domain"
+    msg "用户名: $cur_user"
+    msg "密码: $cur_pass"
+    [[ -n "$cur_email" && "$cur_email" != "null" ]] && msg "Email: $cur_email"
+
+    # Show change options
+    local change_options=(
+        "更改端口"
+        "更改域名"
+        "更改用户名"
+        "更改密码"
+        "更改 Email"
+        "更改 Cloudflare API Token"
+    )
+
+    msg "\n$(_cyan '请选择要更改的项目:')\n"
+    local i=1
+    for opt in "${change_options[@]}"; do
+        msg "  $i) $opt"
+        ((i++))
+    done
+    msg ""
+
+    local choice
+    ask string choice "请选择 [1-${#change_options[@]}]:"
+
+    local new_port=$cur_port
+    local new_domain=$cur_domain
+    local new_user=$cur_user
+    local new_pass=$cur_pass
+    local new_email=$cur_email
+    local new_api_token=$cur_api_token
+    local new_zone_token=$cur_zone_token
+
+    case $choice in
+        1) # Change port
+            ask string new_port "请输入新端口 (当前: $cur_port):"
+            if ! _validate_port "$new_port"; then
+                err "端口 ($new_port) 无效, 必须是 1-65535"
+            fi
+            if [[ "$new_port" != "$cur_port" ]]; then
+                if _is_port_in_conf "$new_port"; then
+                    err "端口 ($new_port) 已被其他 inbound 使用"
+                fi
+                if [[ $(is_test port_used "$new_port") ]]; then
+                    err "端口 ($new_port) 已被系统其他服务占用"
+                fi
+            fi
+            ;;
+        2) # Change domain
+            msg "$(_yellow '提示: 域名必须在 Cloudflare 解析, 且设置为 DNS only (灰云)')"
+            ask string new_domain "请输入新域名 (当前: $cur_domain):"
+            [[ -z "$new_domain" ]] && err "域名不能为空"
+            ;;
+        3) # Change username
+            ask string new_user "请输入新用户名 (当前: $cur_user):"
+            [[ -z "$new_user" ]] && err "用户名不能为空"
+            ;;
+        4) # Change password
+            ask string new_pass "请输入新密码 (当前: $cur_pass):"
+            [[ -z "$new_pass" ]] && err "密码不能为空"
+            ;;
+        5) # Change email
+            echo -ne "请输入新 Email (当前: ${cur_email:-无}, 直接回车清空):"
+            read new_email
+            ;;
+        6) # Change Cloudflare API Token
+            ask string new_api_token "请输入新 Cloudflare API Token:"
+            [[ -z "$new_api_token" ]] && err "API Token 不能为空"
+            echo -ne "请输入新 Zone Token (可选, 直接回车跳过):"
+            read new_zone_token
+            ;;
+        *)
+            err "无效的选择"
+            ;;
+    esac
+
+    # Build new config
+    local new_tag="${HTTPS_PROXY_PREFIX}-${new_port}"
+    local new_config_file="$is_conf_dir/${new_tag}.json"
+
+    # Build dns01_challenge object
+    local dns01_json
+    if [[ -n "$new_zone_token" && "$new_zone_token" != "null" ]]; then
+        dns01_json=$(jq -n \
+            --arg provider "cloudflare" \
+            --arg api_token "$new_api_token" \
+            --arg zone_token "$new_zone_token" \
+            '{provider: $provider, api_token: $api_token, zone_token: $zone_token}')
+    else
+        dns01_json=$(jq -n \
+            --arg provider "cloudflare" \
+            --arg api_token "$new_api_token" \
+            '{provider: $provider, api_token: $api_token}')
+    fi
+
+    # Build acme object
+    local acme_json
+    if [[ -n "$new_email" && "$new_email" != "null" ]]; then
+        acme_json=$(jq -n \
+            --arg domain "$new_domain" \
+            --arg email "$new_email" \
+            --arg data_dir "$HTTPS_PROXY_ACME_DIR" \
+            --argjson dns01 "$dns01_json" \
+            '{domain: [$domain], email: $email, provider: "letsencrypt", data_directory: $data_dir, dns01_challenge: $dns01}')
+    else
+        acme_json=$(jq -n \
+            --arg domain "$new_domain" \
+            --arg data_dir "$HTTPS_PROXY_ACME_DIR" \
+            --argjson dns01 "$dns01_json" \
+            '{domain: [$domain], provider: "letsencrypt", data_directory: $data_dir, dns01_challenge: $dns01}')
+    fi
+
+    # Build full config
+    local full_json
+    full_json=$(jq -n \
+        --arg tag "$new_tag" \
+        --argjson port "$new_port" \
+        --arg username "$new_user" \
+        --arg password "$new_pass" \
+        --argjson acme "$acme_json" \
+        '{
+            inbounds: [{
+                type: "http",
+                tag: $tag,
+                listen: "0.0.0.0",
+                listen_port: $port,
+                users: [{username: $username, password: $password}],
+                tls: {
+                    enabled: true,
+                    min_version: "1.2",
+                    max_version: "1.3",
+                    acme: $acme
+                }
+            }]
+        }')
+
+    # Backup old config
+    local backup_file="${config_file}.bak.$$"
+    cp "$config_file" "$backup_file"
+
+    # If port changed, we need to create new file and delete old one
+    if [[ "$new_port" != "$cur_port" ]]; then
+        echo "$full_json" > "$new_config_file"
+        chmod 600 "$new_config_file"
+    else
+        echo "$full_json" > "$config_file"
+        chmod 600 "$config_file"
+    fi
+
+    # Validate config
+    msg "\n验证配置..."
+    if ! _check_config; then
+        # Rollback
+        if [[ "$new_port" != "$cur_port" ]]; then
+            rm -f "$new_config_file"
+        else
+            mv "$backup_file" "$config_file"
+        fi
+        err "配置验证失败, 已回滚更改"
+    fi
+
+    # Remove backup and old config if port changed
+    rm -f "$backup_file"
+    if [[ "$new_port" != "$cur_port" ]]; then
+        rm -f "$config_file"
+    fi
+
+    msg "$(_green '配置更新成功!')"
+
+    # Restart sing-box
+    manage restart &
+
+    # Show new config
+    msg "\n$(_green '=== 更新后的配置 ===')"
+    msg "端口: $new_port"
+    msg "域名: $new_domain"
+    msg "用户名: $new_user"
+    msg "密码: $new_pass"
+    msg "\n$(_cyan '=== 客户端使用方法 ===')"
+    msg "代理地址: https://${new_user}:${new_pass}@${new_domain}:${new_port}"
+    msg "\n$(_cyan '=== curl 测试命令 ===')"
+    msg "curl -v --proxy 'https://${new_user}:${new_pass}@${new_domain}:${new_port}' https://api.ipify.org"
+    msg ""
+}
+
 # Main entry point
 https_proxy_main() {
     local action=$1
@@ -402,6 +649,9 @@ https_proxy_main() {
     case $action in
         add)
             https_proxy_add "$@"
+            ;;
+        change | c)
+            https_proxy_change "$@"
             ;;
         del | rm | delete)
             https_proxy_del "$@"
@@ -415,6 +665,7 @@ https_proxy_main() {
         *)
             msg "\nHTTPS Proxy 命令用法:"
             msg "  $is_core https-proxy add [port] [domain] [user] [pass] [email]"
+            msg "  $is_core https-proxy change [port|tag]"
             msg "  $is_core https-proxy del <port|tag>"
             msg "  $is_core https-proxy info [port|tag]"
             msg "  $is_core https-proxy list"

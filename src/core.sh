@@ -379,9 +379,11 @@ create() {
 
 # change config file
 change() {
-    # HTTPS-PROXY configs don't support change via menu, need to delete and re-add
+    # Handle HTTPS-PROXY configs specially
     if [[ $1 == HTTPS-PROXY-* ]]; then
-        err "HTTPS-Proxy 配置不支持更改, 请使用 '$is_core https-proxy del $1' 删除后重新添加."
+        load https-proxy.sh
+        https_proxy_change "$1"
+        return
     fi
     is_change=1
     is_dont_show_info=1
@@ -446,9 +448,11 @@ change() {
         info $1
         [[ $is_auto_get_config ]] && msg "\n自动选择: $is_config_file"
     }
-    # Check if selected config is HTTPS-PROXY (after info sets $is_config_file)
+    # Handle HTTPS-PROXY configs specially (after info sets $is_config_file)
     if [[ $is_config_file == HTTPS-PROXY-* ]]; then
-        err "HTTPS-Proxy 配置不支持更改, 请使用 '$is_core https-proxy del' 删除后重新添加."
+        load https-proxy.sh
+        https_proxy_change "$is_config_file"
+        return
     fi
     is_old_net=$net
     [[ $is_tcp_http ]] && net=http
